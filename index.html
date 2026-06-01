@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CS TCG チェッカー</title>
+    <style>
+        /* 背景をきゅーすとのグループカラー（優しいクリーム色） */
+        body { 
+            font-family: sans-serif; 
+            background-color: #fffdf0; 
+            text-align: center; 
+            margin: 0; 
+            padding: 20px; 
+            color: #4a4a4a; 
+        }
+        h1 { color: #333; margin-bottom: 5px; }
+        .subtitle { color: #7a7a7a; margin-bottom: 20px; }
+        
+        /* 進化版コンプリート率表示エリア */
+        .progress-container {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            max-width: 500px;
+            margin: 0 auto 20px;
+            box-shadow: 0 4px 10px rgba(180,170,140,0.1); 
+            box-sizing: border-box;
+            transition: all 0.3s ease;
+        }
+        .progress-text {
+            font-size: 1rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+            display: flex;
+            flex-direction: column; 
+            align-items: center;
+            gap: 4px;
+        }
+        /* 掛け合わせの条件を表示するエリア */
+        #progress-target {
+            font-size: 0.95rem;
+            color: #555;
+            word-break: break-all;
+        }
+        #progress-percent {
+            font-size: 1.2rem;
+            color: #333;
+            margin-top: 2px;
+        }
+        .progress-bar-bg {
+            width: 100%;
+            height: 14px;
+            background-color: #f3efe0; 
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 6px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%; 
+            background: linear-gradient(90deg, #ffb6c1, #9370db);
+            border-radius: 10px;
+            transition: width 0.4s ease, background 0.3s ease; 
+        }
+
+        /* 推し（紫）が含まれる条件のときはゲージの色も推し色に */
+        .progress-container.purple-mode .progress-bar-fill {
+            background: linear-gradient(90deg, #b099e6, #9370db);
+        }
+        .progress-container.purple-mode #progress-target {
+            color: #9370db;
+        }
+
+        /* メインのボタン */
+        .toggle-menu-btn {
+            background: #4a4a4a;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.08);
+            transition: 0.2s;
+            margin-bottom: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .toggle-menu-btn:hover { background: #666; }
+
+        /* フィルター全体 */
+        .filter-section { 
+            background: white; 
+            padding: 18px; 
+            border-radius: 12px; 
+            max-width: 500px; 
+            margin: 0 auto 20px; 
+            box-shadow: 0 4px 10px rgba(180,170,140,0.1); 
+            text-align: left; 
+            display: none; 
+        }
+        
+        .filter-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .filter-row:last-child { margin-bottom: 0; }
+        .filter-label { font-weight: bold; font-size: 0.9rem; color: #555; }
+        
+        .filter-select { 
+            width: 65%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; 
+            background-color: #fafafa; font-size: 0.9rem; color: #333; cursor: pointer; outline: none;
+        }
+        .filter-select:focus { border-color: #b2ebf2; background-color: #fff; }
+
+        /* チェックボックス用のスタイル */
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: #e65100; /* ちょっと目を引くオレンジ系 */
+        }
+        .checkbox-container input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        /* グリッドレイアウト */
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 12px; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+        }
+        @media (min-width: 600px) {
+            .grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
+        }
+        
+        /* 🎴 トレカの基本スタイル（63mm × 88mm 固定） */
+        .card { 
+            border: 3px solid #e2ded0; 
+            border-radius: 12px; 
+            background: white; 
+            transition: all 0.3s ease; 
+            box-shadow: 0 3px 8px rgba(180,170,140,0.08); 
+            text-align: left; 
+            overflow: hidden; 
+            aspect-ratio: 63 / 88; 
+            position: relative; 
+        }
+        
+        /* 📸 画像エリア */
+        .card-image-wrapper { 
+            width: 100%; 
+            height: 100%; 
+            background: #fdfcf7; 
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        .card-img { width: 100%; height: 100%; object-fit: cover; transition: 0.3s; display: block; }
+        .card:not(.owned) .card-img { filter: grayscale(100%) opacity(40%); }
+
+        /* 情報エリア（57%設定！） */
+        .card-info { 
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 2;
+            height: 57%; 
+            padding: 8px 10px; 
+            box-sizing: border-box;
+            background: linear-gradient(to top, rgba(255,255,255,0.95) 85%, rgba(255,255,255,0.4) 100%);
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between; 
+        }
+        
+        /* 所持している時の背景グラデーション */
+        .card.purple.owned .card-info { background: linear-gradient(to top, rgba(235,220,245,0.96) 80%, rgba(235,220,245,0.4) 100%); }
+        .card.lemon_yellow.owned .card-info { background: linear-gradient(to top, rgba(255,248,200,0.96) 80%, rgba(255,248,200,0.4) 100%); }
+        .card.red.owned .card-info { background: linear-gradient(to top, rgba(255,220,215,0.96) 80%, rgba(255,220,215,0.4) 100%); }
+        .card.mint_green.owned .card-info { background: linear-gradient(to top, rgba(215,255,220,0.96) 80%, rgba(215,255,220,0.4) 100%); }
+        .card.blue.owned .card-info { background: linear-gradient(to top, rgba(215,235,255,0.96) 80%, rgba(215,235,255,0.4) 100%); }
+        .card.orange.owned .card-info { background: linear-gradient(to top, rgba(255,230,210,0.96) 80%, rgba(255,230,210,0.4) 100%); }
+        .card.light_blue.owned .card-info { background: linear-gradient(to top, rgba(215,245,255,0.96) 80%, rgba(215,245,255,0.4) 100%); }
+        .card.pink.owned .card-info { background: linear-gradient(to top, rgba(255,215,225,0.96) 80%, rgba(255,215,225,0.4) 100%); }
+
+        /* メンカラの枠線設定 */
+        .card.purple { border-color: #9370DB; border-width: 4px; } 
+        .card.lemon_yellow { border-color: #FFE57F; border-width: 4px; } 
+        .card.red { border-color: #FF4500; border-width: 4px; } 
+        .card.mint_green { border-color: #7CCD7C; border-width: 4px; } 
+        .card.blue { border-color: #1E90FF; border-width: 4px; } 
+        .card.orange { border-color: #FF8C00; border-width: 4px; } 
+        .card.light_blue { border-color: #A0E0FF; border-width: 4px; } 
+        .card.pink { border-color: #FF82AB; border-width: 4px; } 
+
+        /* 文字サイズ調整 */
+        .rarity-badge { display: inline-block; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; background: #fcf8e3; color: #b8860b; border: 1px solid #fbeed5; margin-bottom: 2px; }
+        .card-title { font-size: 0.85rem; margin: 1px 0; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .card-no { font-size: 0.7rem; color: #666; margin: 0; line-height: 1; }
+        .card-pack { font-size: 0.7rem; margin: 1px 0; color: #777; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        /* カウンターエリア */
+        .counter-zone { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 4px; border-top: 1px dashed rgba(0,0,0,0.08); }
+        .count-display { font-size: 0.85rem; font-weight: bold; color: #333; }
+        .count-btn { width: 22px; height: 22px; border-radius: 50px; border: 1px solid #ccc; background: white; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    </style>
+
+    <link rel="apple-touch-icon" href="icon.png">
+</head>
+<body>
+
+    <h1>CS TCG チェッカー</h1>
+
+    <!-- コンプリート率＆棒グラフ表示エリア -->
+    <div class="progress-container" id="progress-container-box">
+        <div class="progress-text">
+            <span id="progress-target">🏆 全体のコンプリート率</span>
+            <span id="progress-percent">0% (0 / 0)</span>
+        </div>
+        <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progress-bar"></div>
+        </div>
+    </div>
+
+    <!-- メニューを開くボタン -->
+    <button class="toggle-menu-btn" id="toggle-btn" onclick="toggleMenu()">
+        🔍 絞り込み・並び替えメニューを開く
+    </button>
+
+    <!-- プルダウンメニューエリア -->
+    <div class="filter-section" id="filter-area">
+        <div class="filter-row">
+            <span class="filter-label">メンバー</span>
+            <select class="filter-select" id="select-member" onchange="filterDropdown('member', this.value)">
+                <option value="ALL">全員</option>
+                <option value="古澤里紗">古澤里紗 (Lemon Yellow)</option>
+                <option value="佐野愛花">佐野愛花 (Red)</option>
+                <option value="板倉可奈">板倉可奈 (Mint Green)</option>
+                <option value="増田彩乃">増田彩乃 (Blue)</option>
+                <option value="川本笑瑠">川本笑瑠 (Orange)</option>
+                <option value="梅田みゆ">梅田みゆ (Light Blue)</option>
+                <option value="真鍋凪咲">真鍋凪咲 (Purple)</option>
+                <option value="桜庭遥花">桜庭遥花 (Pink)</option>
+            </select>
+        </div>
+
+        <!-- 👈 新設：ダブりのみ表示のチェックボックス行 -->
+        <div class="filter-row">
+            <span class="filter-label">状態</span>
+            <div class="filter-select" style="border: none; background: transparent; padding: 0; width: 65%;">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="check-duplicate" onchange="toggleDuplicateFilter()">
+                    🔁 ダブりのみ表示 (2枚以上)
+                </label>
+            </div>
+        </div>
+
+        <div class="filter-row">
+            <span class="filter-label">レア度</span>
+            <select class="filter-select" id="select-rarity" onchange="filterDropdown('rarity', this.value)">
+                <option value="ALL">すべて</option>
+                <option value="N">⭐⭐ (N)</option>
+                <option value="R">⭐⭐⭐ (R)</option>
+                <option value="SR">⭐⭐⭐⭐ (SR)</option>
+                <option value="UR">⭐⭐⭐⭐⭐ (UR)</option>
+            </select>
+        </div>
+
+        <div class="filter-row">
+            <span class="filter-label">パック</span>
+            <select class="filter-select" id="select-pack" onchange="filterDropdown('title', this.value)">
+                <option value="ALL">すべてのパック</option>
+            </select>
+        </div>
+
+        <div class="filter-row">
+            <span class="filter-label" style="color: #006064;">並び替え</span>
+            <select class="filter-select" style="border-color: #b2ebf2;" onchange="sortDropdown(this.value)">
+                <option value="no">ナンバー順</option>
+                <option value="rarity">レア度高い順</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="grid" id="card-grid">
+        <p>データを読み込んでいます...</p>
+    </div>
+
+    <script>
+        const gasUrl = 'https://script.google.com/macros/s/AKfycbzv5LKZrpHUgbnUbhTHqHXA3kyw7M4CJk3U-n9wKzKQJk07qXeYdzD5Ur5zEGCkHy_g/exec';
+
+        let allCardsData = []; 
+        let currentFilters = { member: 'ALL', rarity: 'ALL', title: 'ALL' };
+        let showOnlyDuplicates = false; // 👈 ダブり状態管理用の変数
+        let currentSortMode = 'no'; 
+
+        window.addEventListener('DOMContentLoaded', () => { fetchCardData(); });
+
+        function toggleMenu() {
+            const menu = document.getElementById('filter-area');
+            const btn = document.getElementById('toggle-btn');
+            if (menu.style.display === 'block') {
+                menu.style.display = 'none';
+                btn.innerText = '🔍 絞り込み・並び替えメニューを開く';
+            } else {
+                menu.style.display = 'block';
+                btn.innerText = '❌ メニューを閉じる';
+            }
+        }
+
+        async function fetchCardData() {
+            try {
+                const response = await fetch(gasUrl);
+                allCardsData = await response.json();
+                generatePackFilters(allCardsData);
+                renderCards(); 
+            } catch (error) {
+                console.error('読み込み失敗:', error);
+                document.getElementById('card-grid').innerHTML = '<p>データの読み込みに失敗しました。</p>';
+            }
+        }
+
+        function getRarityScore(rarityText) {
+            if (!rarityText) return 0;
+            const r = rarityText.trim().toUpperCase();
+            if (r === 'N' || r === '2') return 2;
+            if (r === 'R' || r === '3') return 3;
+            if (r === 'SR' || r === '4') return 4;
+            if (r === 'UR' || r === '5') return 5;
+            return 0;
+        }
+
+        function convertToStars(rarityText) {
+            const score = getRarityScore(rarityText);
+            if (score === 3) return '⭐⭐⭐';
+            if (score === 4) return '⭐⭐⭐⭐';
+            if (score === 5) return '⭐⭐⭐⭐⭐';
+            return '⭐⭐';
+        }
+
+        function generatePackFilters(cards) {
+            const packSelect = document.getElementById('select-pack');
+            const titles = [...new Set(cards.map(card => card.title).filter(Boolean))];
+            titles.forEach(title => {
+                const opt = document.createElement('option');
+                opt.value = title;
+                opt.innerText = title;
+                packSelect.appendChild(opt);
+            });
+        }
+
+        function updateProgressBar() {
+            if (allCardsData.length === 0) return;
+
+            const savedCounts = JSON.parse(localStorage.getItem('cs_trading_cards')) || {};
+            
+            const targetCards = allCardsData.filter(card => {
+                const matchMember = currentFilters.member === 'ALL' || card.member === currentFilters.member;
+                const matchRarity = currentFilters.rarity === 'ALL' || card.rarity === currentFilters.rarity;
+                const matchTitle = currentFilters.title === 'ALL' || card.title === currentFilters.title;
+                return matchMember && matchRarity && matchTitle;
+            });
+
+            let labels = [];
+            if (currentFilters.member !== 'ALL') labels.push(`🪄 ${currentFilters.member}`);
+            if (showOnlyDuplicates) labels.push(`🔁 ダブり`);
+            if (currentFilters.rarity !== 'ALL') labels.push(`✨ ${currentFilters.rarity}`);
+            if (currentFilters.title !== 'ALL') labels.push(`📦 ${currentFilters.title}`);
+
+            const targetSpan = document.getElementById('progress-target');
+            if (labels.length > 0) {
+                targetSpan.innerText = `${labels.join(' × ')} の収集率`;
+            } else {
+                targetSpan.innerText = `🏆 全体のコンプリート率`;
+            }
+
+            const containerBox = document.getElementById('progress-container-box');
+            if (currentFilters.member === '真鍋凪咲') {
+                containerBox.classList.add('purple-mode');
+            } else {
+                containerBox.classList.remove('purple-mode');
+            }
+            
+            let ownedTypesCount = 0;
+            targetCards.forEach(card => {
+                if (savedCounts[card.id] && savedCounts[card.id] > 0) {
+                    ownedTypesCount++;
+                }
+            });
+
+            const totalTypesCount = targetCards.length;
+            const percent = totalTypesCount > 0 ? Math.floor((ownedTypesCount / totalTypesCount) * 100) : 0;
+
+            document.getElementById('progress-percent').innerText = totalTypesCount > 0 
+                ? `${percent}% (${ownedTypesCount} / ${totalTypesCount} 種)` 
+                : `0% (0 / 0 種)`;
+            document.getElementById('progress-bar').style.width = `${percent}%`;
+        }
+
+        function renderCards() {
+            const grid = document.getElementById('card-grid');
+            grid.innerHTML = ''; 
+
+            const savedCounts = JSON.parse(localStorage.getItem('cs_trading_cards')) || {};
+
+            let processedCards = allCardsData.filter(card => {
+                const matchMember = currentFilters.member === 'ALL' || card.member === currentFilters.member;
+                const matchRarity = currentFilters.rarity === 'ALL' || card.rarity === currentFilters.rarity;
+                const matchTitle = currentFilters.title === 'ALL' || card.title === currentFilters.title;
+                
+                // チェックが入っている時は、2枚以上持っているカードだけを通過させる
+                let matchDuplicate = true;
+                if (showOnlyDuplicates) {
+                    matchDuplicate = (savedCounts[card.id] && savedCounts[card.id] >= 2);
+                }
+
+                return matchMember && matchRarity && matchTitle && matchDuplicate;
+            });
+
+            if (currentSortMode === 'rarity') {
+                processedCards.sort((a, b) => getRarityScore(b.rarity) - getRarityScore(a.rarity));
+            } else {
+                processedCards.sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, {numeric: true}));
+            }
+
+            if (processedCards.length === 0) {
+                grid.innerHTML = '<p>該当するカードがありません。</p>';
+                updateProgressBar();
+                return;
+            }
+
+            processedCards.forEach(card => {
+                let colorClass = card.color ? card.color.trim().toLowerCase().replace(/\s+/g, '_') : '';
+
+                const cardEl = document.createElement('div');
+                cardEl.className = `card ${colorClass}`;
+                
+                const currentCount = savedCounts[card.id] || 0;
+                if (currentCount > 0) cardEl.classList.add('owned');
+                
+                let imageHtml = '<div class="card-image-wrapper"><div class="card-img"></div></div>';
+                if (card.image_url && card.image_url.trim() !== '') {
+                    imageHtml = `
+                        <div class="card-image-wrapper">
+                            <img src="${card.image_url}" class="card-img" alt="カード画像">
+                        </div>
+                    `;
+                }
+                
+                const starRating = convertToStars(card.rarity);
+                
+                cardEl.innerHTML = `
+                    ${imageHtml}
+                    <div class="card-info">
+                        <div>
+                            <span class="rarity-badge">${starRating}</span>
+                            <p class="card-no">${card.no || ''}</p>
+                            <div class="card-title">${card.member || ''}</div>
+                            <p class="card-pack">${card.title || ''}</p>
+                        </div>
+                        <div class="counter-zone">
+                            <button class="count-btn" onclick="changeCount('${card.id}', -1)">-</button>
+                            <div class="count-display"><span id="count-${card.id}">${currentCount}</span>枚</div>
+                            <button class="count-btn" onclick="changeCount('${card.id}', 1)">+</button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(cardEl);
+            });
+
+            updateProgressBar();
+        }
+
+        function changeCount(cardId, amount) {
+            const countSpan = document.getElementById(`count-${cardId}`);
+            if(!countSpan) return;
+            
+            let currentCount = parseInt(countSpan.innerText);
+            currentCount += amount;
+            if (currentCount < 0) currentCount = 0; 
+            countSpan.innerText = currentCount;
+
+            const cardEl = countSpan.closest('.card');
+            if (currentCount > 0) {
+                cardEl.classList.add('owned');
+            } else {
+                cardEl.classList.remove('owned');
+            }
+
+            const savedCounts = JSON.parse(localStorage.getItem('cs_trading_cards')) || {};
+            savedCounts[cardId] = currentCount;
+            localStorage.setItem('cs_trading_cards', JSON.stringify(savedCounts));
+
+            // 「ダブりのみ表示」にチェックが入っている時に枚数が2枚未満になったら、即画面から消す
+            if (showOnlyDuplicates && currentCount < 2) {
+                renderCards();
+            } else {
+                updateProgressBar();
+            }
+        }
+
+        function filterDropdown(type, value) {
+            currentFilters[type] = value;
+            renderCards();
+        }
+
+        // 👈 新設：チェックボックスが切り替わった時の処理
+        function toggleDuplicateFilter() {
+            showOnlyDuplicates = document.getElementById('check-duplicate').checked;
+            renderCards();
+        }
+
+        function sortDropdown(sortMode) {
+            currentSortMode = sortMode;
+            renderCards();
+        }
+    </script>
+</body>
+</html>
