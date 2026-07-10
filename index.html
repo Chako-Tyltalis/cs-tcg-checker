@@ -239,7 +239,18 @@
         .count-btn { width: 22px; height: 22px; border-radius: 50px; border: 1px solid #ccc; background: white; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     </style>
 
-    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="manifest" href="manifest.json">
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                  .then(reg => console.log('PWA準備完了'))
+                  .catch(err => console.log('エラー:', err));
+            });
+        }
+    </script>
+
 </head>
 <body>
 
